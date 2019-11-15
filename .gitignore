@@ -1,4 +1,5 @@
 *~
 *.o
+*.BAK
 .DS_Store
 bedlevel
