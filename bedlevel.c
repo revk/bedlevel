@@ -31,14 +31,15 @@ tx(const char *fmt,...)
    free(buf);
 }
 
-int             clearance = 3;
-int             dive = 20;
+int             clearance = 2;
+int             dive = 10;
+int             park = 5;
 double
-z(int x, int y)
+z(double x, double y)
 {
    //Get z axis at a point
    double          z = 0;
-   tx("G1 X%dY%dF1000\n", x, y);
+   tx("G1 X%lfY%lfF1000\n", x, y);
    tx("G91\n");                 /* rel */
    tx("G38.2 Z-%d F20\n", dive);
    tx("G90\n");                 /* abs */
@@ -81,17 +82,20 @@ z(int x, int y)
 int
 main(int argc, const char *argv[])
 {
-   int             width = 0;
-   int             height = 0;
+   double          width = 0;
+   double          height = 0;
+   int             point = 0;
    const char     *port = NULL;
    {
       poptContext     optCon;
       const struct poptOption optionsTable[] = {
          {"port", 'p', POPT_ARG_STRING, &port, 0, "Serial port", "/dev/cu.usb..."},
-         {"width", 'w', POPT_ARG_INT, &width, 0, "Width", "mm"},
-         {"height", 'h', POPT_ARG_INT, &height, 0, "Height", "mm"},
+         {"width", 'w', POPT_ARG_DOUBLE, &width, 0, "Width", "mm"},
+         {"height", 'h', POPT_ARG_DOUBLE, &height, 0, "Height", "mm"},
+         {"point", 0, POPT_ARG_NONE, &point, 0, "Width/height in pt not mm"},
          {"clearance", 'c', POPT_ARG_INT | POPT_ARGFLAG_SHOW_DEFAULT, &clearance, 0, "Clearance", "mm"},
          {"dive", 'd', POPT_ARG_INT | POPT_ARGFLAG_SHOW_DEFAULT, &dive, 0, "Depth to go", "mm"},
+         {"park", 'P', POPT_ARG_INT | POPT_ARGFLAG_SHOW_DEFAULT, &park, 0, "Park at", "mm"},
          {"debug", 'V', POPT_ARG_NONE, &debug, 0, "Debug"},
          POPT_AUTOHELP {}
       };
@@ -107,6 +111,11 @@ main(int argc, const char *argv[])
          return -1;
       }
       poptFreeContext(optCon);
+   }
+   if (point)
+   {
+      width *= 25.4 / 72;
+      height *= 25.4 / 72;
    }
    p = open(port, O_RDWR | O_EXLOCK);
    if (p < 0)
@@ -125,7 +134,7 @@ main(int argc, const char *argv[])
                    c = 0,
                    d = 0;
    tx("G90\n");                 /* absolute */
-   tx("G28.3 Z0Y0Z0\n");        /* origin */
+   tx("G28.3 X0Y0Z0\n");        /* origin */
    tx("G1 Z1F1000\n");          /* just in case */
    a = z(0, 0);
    if (width)
@@ -141,8 +150,10 @@ main(int argc, const char *argv[])
    else
       d = c;
    tx("G1 X0Y0F1000\n");        /* home */
-   tx("G28.3 Z0Y0Z%d\n", clearance);    /* origin */
+   tx("G1 Z%lfF1000\n", a + clearance);
+   tx("G28.3 X0Y0Z%d\n", clearance);    /* origin */
+   tx("G1 Z%dF1000\n", park);
    close(p);
-   printf("%lf %lf %lf %lf\n", a + clearance, b + clearance, c + clearance, d + clearance);
+   printf("%lf %lf %lf %lf %lf\n", width, height, b - a, c - a, d - a);
    return 0;
 }
