@@ -33,16 +33,17 @@ tx(const char *fmt,...)
 }
 
 int             clearance = 2;
-int             dive = 10;
+int             dive = 20;
 int             park = 5;
+double          lastz = 0;
 double
-z(double x, double y, double clearance)
+z(double x, double y)
 {
    //Get z axis at a point
    double          z = 0;
+   tx("G1 Z%lfF1000\n", lastz + clearance);
    tx("G1 X%lfY%lfF1000\n", x, y);
-   tx("G91\n");                 /* rel */
-   tx("G38.2 Z-%d F20\n", dive);
+   tx("G38.2 Z%lf F20\n", lastz - dive);
    char            buf[1000];
    struct pollfd   fds = {.fd = p,.events = POLLIN};
    int             n = 0;
@@ -77,10 +78,10 @@ z(double x, double y, double clearance)
          }
       }
    }
-   tx("G90\n");                 /* abs */
-   tx("G1 Z%lf F1000\n", z + clearance);
    if (debug)
       fprintf(stderr, "z=%lf\n", z);
+   lastz = z;
+   dive = 1;
    return z;
 }
 
@@ -140,33 +141,31 @@ main(int argc, const char *argv[])
                    d = 0;
    tx("G90\n");                 /* absolute */
    tx("G28.3 X0Y0Z0\n");        /* origin */
-   tx("G1 Z1F1000\n");          /* just in case */
-   double          a1 = z(0, 0, -0.1);
+   double          a1 = z(0, 0);
    while (1)
    {
       //Try again to be sure
          tx("G1 Z%lf F1000\n", a1 + 1);
-      a = z(0, 0, -0.1);
+      a = z(0, 0);
       if (round(a * 10) == round(a1 * 10))
          break;
       fprintf(stderr, "Trying again %.2f/%.2f\n", a1, a);
       a1 = a;
    }
-   tx("G1 Z%lf F1000\n", a + clearance);
    if (width)
-      b = z(width, 0, clearance);
+      b = z(width, 0);
    else
       b = a;
    if (width && height)
-      c = z(width, height, clearance);
+      c = z(width, height);
    else
       c = b;
    if (height)
-      d = z(0, height, clearance);
+      d = z(0, height);
    else
       d = c;
-   tx("G1 X0Y0F1000\n");        /* home */
    tx("G1 Z%lfF1000\n", a + clearance);
+   tx("G1 X0Y0F1000\n");        /* home */
    tx("G28.3 X0Y0Z%d\n", clearance);    /* origin */
    tx("G1 Z%dF1000\n", park);
    close(p);
