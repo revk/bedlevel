@@ -64,6 +64,8 @@ z(double x, double y)
                buf[l++] = 0;
             if (debug)
                fprintf(stderr, "Rx: %s\n", buf);
+            if (strstr(buf, "\"prb\""))
+               break;
             char           *zp = strstr(buf, "\"posz\":");
             if (zp)
                z = strtod(zp + 7, NULL);
@@ -136,6 +138,9 @@ main(int argc, const char *argv[])
    tx("G90\n");                 /* absolute */
    tx("G28.3 X0Y0Z0\n");        /* origin */
    tx("G1 Z1F1000\n");          /* just in case */
+   a = z(0, 0);
+   tx("G1 Z%lf F1000\n", a - 0.05);
+   tx("G1 Z%lf F1000\n", a + clearance);
    a = z(0, 0);
    if (width)
       b = z(width, 0);
