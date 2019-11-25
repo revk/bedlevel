@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <poll.h>
+#include <math.h>
 
 int             debug = 0;
 
@@ -35,14 +36,13 @@ int             clearance = 2;
 int             dive = 10;
 int             park = 5;
 double
-z(double x, double y)
+z(double x, double y, double clearance)
 {
    //Get z axis at a point
    double          z = 0;
    tx("G1 X%lfY%lfF1000\n", x, y);
    tx("G91\n");                 /* rel */
    tx("G38.2 Z-%d F20\n", dive);
-   tx("G90\n");                 /* abs */
    char            buf[1000];
    struct pollfd   fds = {.fd = p,.events = POLLIN};
    int             n = 0;
@@ -77,7 +77,10 @@ z(double x, double y)
          }
       }
    }
+   tx("G90\n");                 /* abs */
    tx("G1 Z%lf F1000\n", z + clearance);
+   if (debug)
+      fprintf(stderr, "z=%lf\n", z);
    return z;
 }
 
@@ -138,20 +141,28 @@ main(int argc, const char *argv[])
    tx("G90\n");                 /* absolute */
    tx("G28.3 X0Y0Z0\n");        /* origin */
    tx("G1 Z1F1000\n");          /* just in case */
-   a = z(0, 0);
-   tx("G1 Z%lf F1000\n", a - 0.05);
+   double          a1 = z(0, 0, -0.1);
+   while (1)
+   {
+      //Try again to be sure
+         tx("G1 Z%lf F1000\n", a1 + 1);
+      a = z(0, 0, -0.1);
+      if (round(a * 10) == round(a1 * 10))
+         break;
+      fprintf(stderr, "Trying again %.2f/%.2f\n", a1, a);
+      a1 = a;
+   }
    tx("G1 Z%lf F1000\n", a + clearance);
-   a = z(0, 0);
    if (width)
-      b = z(width, 0);
+      b = z(width, 0, clearance);
    else
       b = a;
    if (width && height)
-      c = z(width, height);
+      c = z(width, height, clearance);
    else
       c = b;
    if (height)
-      d = z(0, height);
+      d = z(0, height, clearance);
    else
       d = c;
    tx("G1 X0Y0F1000\n");        /* home */
