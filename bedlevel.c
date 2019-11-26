@@ -42,15 +42,16 @@ double
 z(double x, double y)
 {
    //Get z axis at a point
+   int             try = 0;
    while (1)
    {
-      double          z = 0;
-      tx("G1 Z%lfF1000\n", lastz + (lastx == x && lasty == y ? 0.5 : clearance));
+      double          z = lastz;
+      tx("G1 Z%lfF1000\n", lastz + (lastx == x && lasty == y ? 0.25 : clearance));
       tx("G1 X%lfY%lfF1000\n", x, y);
-      tx("G38.2 Z%lf F20\n", lastz - dive);
-      char            buf[1000];
-      struct pollfd   fds = {.fd = p,.events = POLLIN};
+      tx("G38.2 Z%lf F%d\n", lastz - dive, try++ ? 5 : 100);
       int             n = 0;
+      struct pollfd   fds = {.fd = p,.events = POLLIN};
+      char            buf[1000];
       while (poll(&fds, 1, 1000) > 0)
       {
          int             l = read(p, buf + n, sizeof(buf) - n - 1);
@@ -153,6 +154,7 @@ main(int argc, const char *argv[])
                    d = 0;
    tx("G90\n");                 /* absolute */
    tx("G28.3 X0Y0Z0\n");        /* origin */
+   tx("G1 Z%lfF1000\n", clearance);
    a = z(0, 0);
    if (width)
       b = z(width, 0);
