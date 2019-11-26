@@ -35,54 +35,66 @@ tx(const char *fmt,...)
 int             clearance = 2;
 int             dive = 20;
 int             park = 5;
-double          lastz = 0;
+double          lastx = 0,
+                lasty = 0,
+                lastz = 0;
 double
 z(double x, double y)
 {
    //Get z axis at a point
-   double          z = 0;
-   tx("G1 Z%lfF1000\n", lastz + clearance);
-   tx("G1 X%lfY%lfF1000\n", x, y);
-   tx("G38.2 Z%lf F20\n", lastz - dive);
-   char            buf[1000];
-   struct pollfd   fds = {.fd = p,.events = POLLIN};
-   int             n = 0;
-   while (poll(&fds, 1, 1000) > 0)
+   while (1)
    {
-      int             l = read(p, buf + n, sizeof(buf) - n - 1);
-      if (l <= 0)
-         errx(1, "read");
-      n += l;
-      buf[n] = 0;
-      if (n >= sizeof(buf) - 1)
-         n = 0;                 /* too long */
-      else
+      double          z = 0;
+      tx("G1 Z%lfF1000\n", lastz + (lastx == x && lasty == y ? 0.5 : clearance));
+      tx("G1 X%lfY%lfF1000\n", x, y);
+      tx("G38.2 Z%lf F20\n", lastz - dive);
+      char            buf[1000];
+      struct pollfd   fds = {.fd = p,.events = POLLIN};
+      int             n = 0;
+      while (poll(&fds, 1, 1000) > 0)
       {
-         for (l = 0; l < n && buf[l] != '\n' && buf[l] != '\r'; l++);
-         if (l <= n)
+         int             l = read(p, buf + n, sizeof(buf) - n - 1);
+         if (l <= 0)
+            errx(1, "read");
+         n += l;
+         buf[n] = 0;
+         if (n >= sizeof(buf) - 1)
+            n = 0;              /* too long */
+         else
          {
-            if (l < n)
-               buf[l++] = 0;
-            if (debug)
-               fprintf(stderr, "Rx: %s\n", buf);
-            if (strstr(buf, "\"prb\""))
-               break;
-            char           *zp = strstr(buf, "\"posz\":");
-            if (zp)
-               z = strtod(zp + 7, NULL);
-            while (l < n && (buf[l] == '\r' || buf[l] == '\n'))
-               l++;
-            if (l < n)
-               memmove(buf, buf + l, n - l);
-            n -= l;
+            for (l = 0; l < n && buf[l] != '\n' && buf[l] != '\r'; l++);
+            if (l <= n)
+            {
+               if (l < n)
+                  buf[l++] = 0;
+               if (debug)
+                  fprintf(stderr, "Rx: %s\n", buf);
+               if (strstr(buf, "\"prb\""))
+                  break;
+               char           *zp = strstr(buf, "\"posz\":");
+               if (zp)
+                  z = strtod(zp + 7, NULL);
+               while (l < n && (buf[l] == '\r' || buf[l] == '\n'))
+                  l++;
+               if (l < n)
+                  memmove(buf, buf + l, n - l);
+               n -= l;
+            }
          }
       }
+      if (debug)
+         fprintf(stderr, "z=%lf\n", z);
+      dive = 1;
+      lastx = x;
+      lasty = y;
+      if (round(z * 10) == round(lastz * 10))
+      {
+         lastz = z;
+         break;
+      }
+      lastz = z;
    }
-   if (debug)
-      fprintf(stderr, "z=%lf\n", z);
-   lastz = z;
-   dive = 1;
-   return z;
+   return lastz;
 }
 
 int
@@ -141,17 +153,7 @@ main(int argc, const char *argv[])
                    d = 0;
    tx("G90\n");                 /* absolute */
    tx("G28.3 X0Y0Z0\n");        /* origin */
-   double          a1 = z(0, 0);
-   while (1)
-   {
-      //Try again to be sure
-         tx("G1 Z%lf F1000\n", a1 + 1);
-      a = z(0, 0);
-      if (round(a * 10) == round(a1 * 10))
-         break;
-      fprintf(stderr, "Trying again %.2f/%.2f\n", a1, a);
-      a1 = a;
-   }
+   a = z(0, 0);
    if (width)
       b = z(width, 0);
    else
