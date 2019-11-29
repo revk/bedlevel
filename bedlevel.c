@@ -32,6 +32,8 @@ tx(const char *fmt,...)
    free(buf);
 }
 
+double          tolerance = 0.02;
+//How close to allow
 int             clearance = 2;
 int             dive = 20;
 int             park = 5;
@@ -43,52 +45,62 @@ z(double x, double y)
 {
    //Get z axis at a point
    int             try = 0;
-   while (1)
+   while (try++ < 20)
    {
+      if (debug)
+         fprintf(stderr, "Try %d\n", try);
       double          z = lastz;
-      tx("G1 Z%lfF1000\n", lastz + (lastx == x && lasty == y ? 0.25 : clearance));
+      tx("G1 Z%lfF1000\n", lastz + (try == 1 ? clearance : try == 2 ? 0.25 : 0.1));
       tx("G1 X%lfY%lfF1000\n", x, y);
-      tx("G38.2 Z%lf F%d\n", lastz - dive, try++ ? 5 : 100);
+      tx("G38.2 Z%lf F%d\n", lastz - dive, try == 1 ? 100 : try == 2 ? 10 : 2);
       int             n = 0;
-      struct pollfd   fds = {.fd = p,.events = POLLIN};
       char            buf[1000];
-      while (poll(&fds, 1, 1000) > 0)
+      char            done = 0;
+      while (!done)
       {
+         struct pollfd   fds = {.fd = p,.events = POLLIN};
+         if (poll(&fds, 1, 1000) <= 0)
+            break;
          int             l = read(p, buf + n, sizeof(buf) - n - 1);
          if (l <= 0)
             errx(1, "read");
          n += l;
          buf[n] = 0;
          if (n >= sizeof(buf) - 1)
-            n = 0;              /* too long */
-         else
          {
-            for (l = 0; l < n && buf[l] != '\n' && buf[l] != '\r'; l++);
-            if (l <= n)
+            warnx("Buffer overrun");
+            n = 0;              /* too long */
+         } else
+         {
+            while (1)
             {
+               for (l = 0; l < n && buf[l] != '\n' && buf[l] != '\r'; l++);
                if (l < n)
+               {
                   buf[l++] = 0;
-               if (debug)
-                  fprintf(stderr, "Rx: %s\n", buf);
-               if (strstr(buf, "\"prb\""))
+                  if (debug)
+                     fprintf(stderr, "Rx: %s\n", buf);
+                  if (strstr(buf, "\"prb\""))
+                     done = 1;
+                  char           *zp = strstr(buf, "\"posz\":");
+                  if (zp)
+                     z = strtod(zp + 7, NULL);
+                  while (l < n && (buf[l] == '\r' || buf[l] == '\n'))
+                     l++;
+                  if (l < n)
+                     memmove(buf, buf + l, n - l);
+                  n -= l;
+               } else
                   break;
-               char           *zp = strstr(buf, "\"posz\":");
-               if (zp)
-                  z = strtod(zp + 7, NULL);
-               while (l < n && (buf[l] == '\r' || buf[l] == '\n'))
-                  l++;
-               if (l < n)
-                  memmove(buf, buf + l, n - l);
-               n -= l;
             }
          }
       }
       if (debug)
-         fprintf(stderr, "z=%lf\n", z);
+         fprintf(stderr, "z=%lf (%.3f)\n", z, z - lastz);
       dive = 1;
       lastx = x;
       lasty = y;
-      if (round(z * 10) == round(lastz * 10))
+      if (fabs(z - lastz) < tolerance)
       {
          lastz = z;
          break;
@@ -111,6 +123,7 @@ main(int argc, const char *argv[])
          {"port", 'p', POPT_ARG_STRING, &port, 0, "Serial port", "/dev/cu.usb..."},
          {"width", 'w', POPT_ARG_DOUBLE, &width, 0, "Width", "mm"},
          {"height", 'h', POPT_ARG_DOUBLE, &height, 0, "Height", "mm"},
+         {"tolerance", 't', POPT_ARG_DOUBLE | POPT_ARGFLAG_SHOW_DEFAULT, &tolerance, 0, "Tolerance", "mm"},
          {"point", 0, POPT_ARG_NONE, &point, 0, "Width/height in pt not mm"},
          {"clearance", 'c', POPT_ARG_INT | POPT_ARGFLAG_SHOW_DEFAULT, &clearance, 0, "Clearance", "mm"},
          {"dive", 'd', POPT_ARG_INT | POPT_ARGFLAG_SHOW_DEFAULT, &dive, 0, "Depth to go", "mm"},
