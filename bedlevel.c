@@ -32,7 +32,7 @@ tx(const char *fmt,...)
    free(buf);
 }
 
-double          tolerance = 0.02;
+double          tolerance = 0.01;
 //How close to allow
 int             clearance = 2;
 int             dive = 20;
