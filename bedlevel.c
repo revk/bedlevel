@@ -232,7 +232,7 @@ main(int argc, const char *argv[])
    waitrx();
    close(p);
    if (!quiet)
-      fprintf(stderr, "Start %lf, Centre mismatch %+.3f, Corners mismatch ±%.3f\n", a, e - q, fabs((a + c) / 2 - (b + d) / 2));
+      fprintf(stderr, "Start %lf, Centre mismatch %+.3f, Corners mismatch ±%.3f\n", a, e - q, fabs((a + c) / 2 - (b + d) / 2) / 2);
    printf("%lf %lf %+lf %+lf %+lf %+lf\n", width, height, b - a, c - a, d - a, e - a);
    return 0;
 }
