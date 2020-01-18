@@ -13,6 +13,7 @@
 #include <math.h>
 
 int             debug = 0;
+int             quiet = 0;
 
 int             p = 0;          /* port */
 void
@@ -37,9 +38,31 @@ double          tolerance = 0.01;
 int             clearance = 2;
 int             dive = 20;
 int             park = 5;
+int             fast = 2000;
 double          lastx = 0,
                 lasty = 0,
                 lastz = 0;
+
+void 
+waitrx(void)
+{
+   while (1)
+   {
+      struct pollfd   fds = {.fd = p,.events = POLLIN};
+      if (poll(&fds, 1, 500) <= 0)
+         break;
+      char            buf[1000];
+      int             l = read(p, buf, sizeof(buf) - 1);
+      if (l <= 0)
+         errx(1, "read");
+      buf[l] = 0;
+      if (debug)
+         fprintf(stderr, "%.*s", l, buf);
+      if (strstr(buf, "{\"qr\":32}"))
+         break;
+   }
+}
+
 double
 z(double x, double y)
 {
@@ -50,8 +73,12 @@ z(double x, double y)
       if (debug)
          fprintf(stderr, "Try %d\n", try);
       double          z = lastz;
-      tx("G1 Z%lfF1000\n", lastz + (try == 1 ? clearance : try == 2 ? 0.25 : 0.1));
-      tx("G1 X%lfY%lfF1000\n", x, y);
+      double          d = (try == 1 ? 0.5 : 0);
+      /* First step may cut in, so offset slightly for more accurate measure next */
+      tx("G1 Z%lfF%d\n", lastz + (try == 1 ? clearance : try == 2 ? 0.25 : 0.1), fast);
+      waitrx();
+      tx("G1 X%lfY%lfF%d\n", x + d, y, fast);
+      waitrx();
       tx("G38.2 Z%lf F%d\n", lastz - dive, try == 1 ? 100 : try == 2 ? 10 : 2);
       int             n = 0;
       char            buf[1000];
@@ -100,13 +127,15 @@ z(double x, double y)
       dive = 1;
       lastx = x;
       lasty = y;
-      if (fabs(z - lastz) < tolerance)
+      if (try > 2 && fabs(z - lastz) < tolerance)
       {
          lastz = z;
          break;
       }
       lastz = z;
    }
+   if (!quiet)
+      fprintf(stderr, "%5.1f/%5.1f %.3f\n", x, y, lastz);
    return lastz;
 }
 
@@ -129,6 +158,7 @@ main(int argc, const char *argv[])
          {"dive", 'd', POPT_ARG_INT | POPT_ARGFLAG_SHOW_DEFAULT, &dive, 0, "Depth to go", "mm"},
          {"park", 'P', POPT_ARG_INT | POPT_ARGFLAG_SHOW_DEFAULT, &park, 0, "Park at", "mm"},
          {"debug", 'V', POPT_ARG_NONE, &debug, 0, "Debug"},
+         {"quiet", 'q', POPT_ARG_NONE, &quiet, 0, "Quiet"},
          POPT_AUTOHELP {}
       };
       optCon = poptGetContext(NULL, argc, argv, optionsTable, 0);
@@ -164,10 +194,15 @@ main(int argc, const char *argv[])
    double          a = 0,
                    b = 0,
                    c = 0,
-                   d = 0;
+                   d = 0,
+                   e = 0,
+                   q = 0;
    tx("G90\n");                 /* absolute */
+   waitrx();
    tx("G28.3 X0Y0Z0\n");        /* origin */
-   tx("G1 Z%lfF1000\n", clearance);
+   waitrx();
+   tx("G1 Z%lfF%d\n", clearance, fast);
+   waitrx();
    a = z(0, 0);
    if (width)
       b = z(width, 0);
@@ -181,11 +216,23 @@ main(int argc, const char *argv[])
       d = z(0, height);
    else
       d = c;
-   tx("G1 Z%lfF1000\n", a + clearance);
-   tx("G1 X0Y0F1000\n");        /* home */
+   q = (a + b + c + d) / 4;
+   //Centre / average
+      if (width && height)
+      e = z(width / 2, height / 2);
+   else
+      e = q;
+   tx("G1 Z%lfF%d\n", a + clearance, fast);
+   waitrx();
+   tx("G1 X0Y0F%d\n", fast);    /* home */
+   waitrx();
    tx("G28.3 X0Y0Z%d\n", clearance);    /* origin */
-   tx("G1 Z%dF1000\n", park);
+   waitrx();
+   tx("G1 Z%dF%d\n", park, fast);
+   waitrx();
    close(p);
-   printf("%lf %lf %lf %lf %lf\n", width, height, b - a, c - a, d - a);
+   if (!quiet)
+      fprintf(stderr, "Start %lf, Centre mismatch %.3f, Corners mismatch %.3f\n", a, e - q, (a + c) / 2 - (b + d) / 2);
+   printf("%lf %lf %lf %lf %lf %lf\n", width, height, b - a, c - a, d - a, e - a);
    return 0;
 }
