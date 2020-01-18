@@ -33,7 +33,7 @@ tx(const char *fmt,...)
    free(buf);
 }
 
-double          tolerance = 0.01;
+double          tolerance = 0.005;
 //How close to allow
 int             clearance = 2;
 int             dive = 20;
@@ -79,7 +79,7 @@ z(double x, double y)
       waitrx();
       tx("G1 X%lfY%lfF%d\n", x + d, y, fast);
       waitrx();
-      tx("G38.2 Z%lf F%d\n", lastz - dive, try == 1 ? 100 : try == 2 ? 10 : 2);
+      tx("G38.2 Z%lf F%d\n", lastz - dive, try == 1 ? 100 : try == 2 ? 10 : 1);
       int             n = 0;
       char            buf[1000];
       char            done = 0;
@@ -127,7 +127,7 @@ z(double x, double y)
       dive = 1;
       lastx = x;
       lasty = y;
-      if (try > 2 && fabs(z - lastz) < tolerance)
+      if (try > 3 && fabs(z - lastz) < tolerance)
       {
          lastz = z;
          break;
